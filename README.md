@@ -1,148 +1,159 @@
-# Cloud Flare hook bash for dehydrated - DNS-01 Challenge Let's Encrypt
+Cloudflare dns-01 challenge hook bash for dehydrated
+====================================================
 
 **If you like this project, or use it, please, star it!**
 
-## DNS-01 challenge solved for "pratically" every domain, thanks to Cloudflare and their API.
+Cloudflare Bash hook for [dehydrated](https://github.com/lukas2511/dehydrated).
 
-CloudFlare Bash hook for dehydrated.
-This is a hook for Let's Encrypt client [dehydrated](https://github.com/lukas2511/dehydrated) to use with Cloud Flare.
+| CI / CD | Status |
+| ------- | ------ |
+| Travis  | [![Build Status](https://travis-ci.com/sineverba/cfhookbash.svg?branch=master)](https://travis-ci.com/sineverba/cfhookbash) |
+| Docker  | [![](https://images.microbadger.com/badges/image/sineverba/cfhookbash.svg)](https://microbadger.com/images/sineverba/cfhookbash "Get your own image badge on microbadger.com") |
 
-## Why Cloud Flare? What is this script?
+## Why Cloudflare? What is this script?
 
-You have all (or some) these problems:
+If you cannot solve the `HTTP-01` challenge, you need to solve the DNS-01 challenge. [Details here](https://letsencrypt.org/docs/challenge-types/).
 
-+ Your domain registrar doesn't have / dont' want give you API to write automatically new DNS record (for DNS-01 Challenge of Let's Encrypt)
-+ Your ISP blocks 80/443 port
-+ You cannot open one or both ports (e.g. several routers have management page only on 80 port)
-+ Let's Encrypt needs to verify on both (80 and 443) to release / renew certificate
+With use of Cloudflare API (valid also on free plan!), this script will verify your domain putting a new record with a special token inside DNS zone.
+At the end of Let's Encrypt validation, that record will be deleted.
+
+Depends on `jq`: `sudo apt get install -y jq`
 
 You only need:
 
-1. Register on Cloudflare
-2. Change your DNS to manage them in Cloudflare (follow their guide). This ATM is valid also for free user!
-3. Run `dehydrated` with this hook.
+1. Register on Cloudflare (it works also on free plan)
+2. Change your domain DNS to manage them in Cloudflare (follow their guide).
+3. Run `dehydrated` with this hook (or run Docker image, see below)
 
-Finish! Stop! End!
+You will find the certificates in the folder of `dehydrated`.
 
-This bash hook will:
 
-1. Contact Let's Encrpyt for DNS-01 challenge (no anymore need forwarded port)
-2. Get the record to write in DNS
-3. Call Cloudflare API and write record
-4. Wait for LE answer
-5. Create / renew the certificates
 
-You will have the certificates in the folder of `dehydrated`).
+### Classic mode: Prerequisites
 
-In simple words: you can complete the DNS challenges (dns-01).
+`cfhookbash` has some prerequisites:
 
-## Development
-Everyone is welcome to contribute!
-Create a `config` file in same folder of `./dehydrated` and put staging inside, to no hit Let's Encrypt limit.
-**Warning! Use this ONLY during development, not in production!**
-
-```
-CA="https://acme-staging-v02.api.letsencrypt.org/directory"
-```
-
-## Require
 + cURL
-+ Active account on Cloud Flare (tested with free account)
++ jq
++ Active account on Cloudflare (tested with free account)
++ Dehydrated ([follow the instructions on Github](https://github.com/dehydrated-io/dehydrated))
 
-## Setup
-```
+### Classic mode: Setup
+
+``` shell
 cd ~
-git clone https://github.com/lukas2511/dehydrated
-cd dehydrated
-mkdir hooks
-cd hooks
 git clone https://github.com/sineverba/cfhookbash.git
-cd ..
-```
-
-Or, in one line
-
-```
-cd ~ && git clone https://github.com/lukas2511/dehydrated && cd dehydrated && mkdir hooks && cd hooks && git clone https://github.com/sineverba/cfhookbash.git && cd ..
 ```
 
 
-## Configuration
+### Classic mode: Configuration
 
 1. Create a file `domains.txt` **in the folder of `dehydrated`**
-2. Put inside a list (one for line) of domain that you want secure.
+2. Put inside a list (one for line) of domains that need certificates.
 
-```
+``` shell
 www.example.com
 home.example.net
-...
+[...]
+```
+3. Move to the folder of `cfhookbash`
+3. Copy `config.default.sh` to `config.sh`
+4. Edit `config.sh`. To get values:
+
+| Value          | Where to find | Deprecated? |
+| -------------- | ------------- | ----------- |
+| Zone ID        | Main page domain > Right Column > API section | N |
+| API Token      | Account > My Profile > API Tokens > Create Token > API token templates > "Edit zone DNS" | N |
+| Global API Key | Account > My Profile > API Tokens > Api Keys > Global API Key | Y, from 4.1.0  |
+
+You can choose between using an **API token** and using your **global API key**. It is preferred to create a token, since tokens can be restricted to just the permission to edit DNS records in chosen zones (the `DNS:Edit` permission).
+
+If you choose to use an API token, it must be filled into `api_token`. If you want to use your global API key, instead use `global_api_key` and `email`.
+
+`Global API key` is deprecated and will be removed in future version.
+
+### Classic mode: Usage
+
+Make a first run with `CA="https://acme-staging-v02.api.letsencrypt.org/directory"` placed in a `config` file in root directory of `dehydrated`.
+
+``` shell
+./dehydrated -c -t dns-01 -k '${PATH_WHERE_YOU_CLONED_CFHOOKBASH}/cfhookbash/hook.sh'
 ```
 
-3. Move inside `cfhookbash` folder
-4. Copy `config.default.sh` to `config.sh`
+You will find the certificates inside `~/dehydrated/certs/[your.domain.name]`.
 
-```
-cd ~/dehydrated/hooks/cfhookbash
-cp config.default.sh config.sh && rm config.default.sh && nano config.sh
-```
-
-We need to edit `config.default.sh`. To get values:
-
-#### Zone
-Login to your Cloudflare account, section "Overview". ZONE is found under "API" on the right column ("Zone ID").
-
-#### Global API Key
-It is under "your account".
-
-## Usage
-
-### First start: need to accept terms
-```
-cd ~/dehydrated
-./dehydrated --register --accept-terms
-```
-
-### Next start
-```
-./dehydrated -c -t dns-01 -k 'hooks/cfhookbash/hook.sh'
-```
-
-You will find the certificates inside `~/dehydrated/certs/www.example.com` (of course the domain name is your).
-
-## Post deploy
+### Classic mode: Post deploy
 You can find in `hook.sh` a recall to another file (`deploy.sh`).
 Here you can write different operation to execute **AFTER** every successfull challenge.
 
 There is a stub file `deploy.config.sh`.
 
 Usage:
-```
+
+``` shell
 copy deploy.config.sh deploy.sh && rm deploy.config.sh && nano deploy.sh
 ```
 
-## Cronjob (try renew every monday)
+### Classic mode: Cronjob
 
 Remember that some action require sudo privilege (start and stop webserver, e.g.).
 
-Best is run as root **in the dehydrated folder of your user**.
+Best is run as root and running in cronjob specify full paths.
 
-To run as cronjob specify full paths
+Following script will run every monday at 4AM and will create a log in home folder.
 
-```
-sudo crontab -e
+`$ sudo crontab -e`
+
+``` shell
 0 4 * * 1 cd /home/YOUR_USER/dehydrated && /home/YOUR_USER/dehydrated/dehydrated -c -t dns-01 -k '/home/YOUR_USER/dehydrated/hooks/cfhookbash/hook.sh' >> /home/YOUR_USER/cfhookbash.log
 ```
-Execute every monday at 4AM. After the script execution, create also a log in your home.
 
-## Update
-+ Move to folder where script resides (tipically `~/dehydrated/hooks/cfhookbash`
+#### Update / upgrade
++ Move to folder where you downloaded it
 + Type `git checkout master && git pull`
 
-##### Contributors, credits and bug discovery :)
+#### Commons error messages
+
+| Error | Body | Solution |
+| ----- | ---- | -------- |
+| 7003  | `{ "code": 7003, "message": "Could not route to /zones/dns_records, perhaps your object identifier is invalid?" }, { "code": 7000, "message": "No route for that URI" }` | Check your `Zone ID` value. Probably is wrong.
+| 1001  | `method_not_allowed` | Install `jq` (`sudo apt install jq`) and upgrade script (`git pull`) |
+
+### Contributing
+Everyone is welcome to contribute! See `CONTRIBUTING.md`
+
+### Contributors, credits and bug discovery :)
 
 + YasharF
 + Ramblurr
++ Dav999-v
 
 Inspired by
 + [https://www.splitbrain.org/blog/2017-08/10-homeassistant_duckdns_letsencrypt](https://www.splitbrain.org/blog/2017-08/10-homeassistant_duckdns_letsencrypt)
-+ [https://github.com/kappataumu/letsencrypt-cloudflare-hook](https://github.com/kappataumu/letsencrypt-cloudflare-hook)
++ [https://github.com/kappataumu/letsencrypt-Cloudflare-hook](https://github.com/kappataumu/letsencrypt-Cloudflare-hook)
+
+----------------------------------------------------
+
+### Docker mode - beware! Not stable and under development!
++ Make a new dir (e.g. `mkdir -p /home/$USER/cfhookbashdocker`)
++ Create a `certs` folder
++ Create one or more folders with name of domain in `certs` (e.g. `certs/example.com` and `certs/test.example.com`)
++ Create a `config` folder
++ Create a `config.sh` file in `/config/` and fill it (see below how to get data)
++ Create a `domains.txt` file in `/config/` and insert a domain for every line
++ Make a first run in stage mode: create a `config` file under `/config` with this content `CA="https://acme-staging-v02.api.letsencrypt.org/directory"`
+
+Run
+
+``` shell
+docker run -it \
+  -v ${PWD}/certs:/certs \
+  -v ${PWD}/config:/config \
+  --name cfhookbash \
+  sineverba/cfhookbash:latest
+```
+
++ Certs will be available in `/certs`
++ Docker run a cronjob every minute
+
+-------------------------------------------------------

@@ -1,4 +1,51 @@
-# 2.4.0
+# 4.1.0
++ Update Docker instructions
++ Update error codes
++ Add support for using API tokens instead of email+global API key
+
+## 4.0.0
+
+### Add
++ Add dependency for `jq`
+
+### Fix
++ Fix "method_not_allowed"
+
+## 3.1.1
+
+### Fix
++ Fix missin DOCKER_API_TOKEN
+
+## 3.1.0
+
+### Add
++ Add `Docker`
++ Add `Travis`
+
+## 3.0.0
+
+### Refactor
++ Renamed branch from `development` to `develop`
++ Improved `hook.sh` looking for config.sh files
++ Changed instructions (no more need to put cfhookbash as subfolder of dehydrated)
+
+## 2.4.3
++ Missing remove file.
+
+## 2.4.2
++ Fix #36 error
+```bash
+{
+"code": 1001,
+"error": "method_not_allowed"
+}}
+```
+
+## 2.4.1
++ Close #16
++ Add Common error messages on README.md
+
+## 2.4.0
 + Fix #28
 + Update README.md (Disable ACME v1 registrations)
 + Update year license

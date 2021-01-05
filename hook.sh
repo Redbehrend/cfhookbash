@@ -2,34 +2,48 @@
 
 prefix="_acme-challenge."
 
-if [[ ! -f "${PWD}/hooks/cfhookbash/config.sh" ]]; then
-    if [[ -f "${PWD}/config.sh" ]]; then
-        configFile="${PWD}/config.sh";
-    fi
-else
-    configFile="${PWD}/hooks/cfhookbash/config.sh";
-fi
+#if [[ ! -f "${PWD}/hooks/cfhookbash/config.sh" ]]; then
+#    if [[ -f "${PWD}/config.sh" ]]; then
+#        configFile="${PWD}/config.sh";
+#    fi
+#else
+#    configFile="${PWD}/hooks/cfhookbash/config.sh";
+#fi
+
+# see https://stackoverflow.com/questions/59895/how-to-get-the-source-directory-of-a-bash-script-from-within-the-script-itself
+hookDirectory=$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )
+configFile="${hookDirectory}/config.sh"
+
 
 
 deploy_challenge() {
     local DOMAIN="${1}" TOKEN_FILENAME="${2}" TOKEN_VALUE="${3}"
 
     . "${configFile}"
-    if [[ -z "${ROOT_DIR}" ]];then
-        rootDirectory="${PWD}/hooks/cfhookbash";
+    #if [[ -z "${ROOT_DIR}" ]];then
+    #    hookDirectory="${PWD}/hooks/cfhookbash";
+    #else
+    #    hookDirectory="${ROOT_DIR}";
+    #fi
+
+    if [ -z $api_token ]; then
+        # New-style API token not found, fall back to global API key
+        curl -X POST "https://api.cloudflare.com/client/v4/zones/${zones}/dns_records"\
+            -H "X-Auth-Email: ${email}"\
+            -H "X-Auth-Key: ${global_api_key}"\
+            -H "Content-Type: application/json"\
+            --data '{"type":"TXT","name":"'${prefix}${1}'","content":"'${3}'","ttl":120,"priority":10,"proxied":false}'\
+            -o "${hookDirectory}/${1}.txt" | jq -r '{"result"}[] | .[0] | .id'
     else
-        rootDirectory="${ROOT_DIR}";
+        curl -X POST "https://api.cloudflare.com/client/v4/zones/${zones}/dns_records"\
+            -H "Authorization: Bearer ${api_token}"\
+            -H "Content-Type: application/json"\
+            --data '{"type":"TXT","name":"'${prefix}${1}'","content":"'${3}'","ttl":120,"priority":10,"proxied":false}'\
+            -o "${hookDirectory}/${1}.txt" | jq -r '{"result"}[] | .[0] | .id'
     fi
 
-    curl -X POST "https://api.cloudflare.com/client/v4/zones/${zones}/dns_records"\
-        -H "X-Auth-Email: ${email}"\
-        -H "X-Auth-Key: ${global_api_key}"\
-        -H "Content-Type: application/json"\
-        --data '{"type":"TXT","name":"'${prefix}${1}'","content":"'${3}'","ttl":120,"priority":10,"proxied":false}'\
-        -o "${rootDirectory}/${1}.txt"
-
     # Add delay to get the new DNS record
-    local DELAY=60;
+    local DELAY=10;
     echo "+++ Wait for ${DELAY} seconds. +++";
     while [ $DELAY -gt 0 ]; do
         sleep 1;
@@ -63,27 +77,33 @@ clean_challenge() {
 
     . "${configFile}"
 
-    if [[ -z "${ROOT_DIR}" ]];then
-        rootDirectory="${PWD}/hooks/cfhookbash";
-    else
-        rootDirectory="${ROOT_DIR}";
-    fi
-
-    key_value=$(grep -Po '"id":.*?[^\\]"' "${rootDirectory}/${1}.txt")
+    # key_value=$(grep -Po '"id":.*?[^\\]"' "${hookDirectory}/${1}.txt")
+    #cat "${hookDirectory}/${1}.txt"
+    #key_value=$(grep -oP '(?<="id": ")[^"]*' "${hookDirectory}/${1}.txt")
+    key_value=$(cat "${hookDirectory}/${1}.txt" | jq -r '.result.id')
     #printf "id: %s\n" "${key_value}"
     #Remove first 6 occurence
-    id="${key_value:6}"
+    #id="${key_value:6}"
     #printf "id: %s\n" "${id}"
     #Remove last char
-    id="${id::-1}"
-    #printf "id: %s\n" "${id}"
+    #id="${id::-1}"
+    id="${key_value}"
+    printf "id: %s\n" "${id}"
 
-    curl -X DELETE "https://api.cloudflare.com/client/v4/zones/$zones/dns_records/${id}" \
-     -H "X-Auth-Email: ${email}"\
-     -H "X-Auth-Key: ${global_api_key}"\
-     -H "Content-Type: application/json"
 
-     rm "${rootDirectory}/${1}.txt"
+    if [ -z $api_token ]; then
+        # New-style API token not found, fall back to global API key
+        curl -X DELETE "https://api.cloudflare.com/client/v4/zones/$zones/dns_records/${id}" \
+         -H "X-Auth-Email: ${email}"\
+         -H "X-Auth-Key: ${global_api_key}"\
+         -H "Content-Type: application/json"
+    else
+        curl -X DELETE "https://api.cloudflare.com/client/v4/zones/$zones/dns_records/${id}" \
+         -H "Authorization: Bearer ${api_token}"\
+         -H "Content-Type: application/json"
+    fi
+
+    rm "${hookDirectory}/${1}.txt"
 
     # This hook is called after attempting to validate each domain,
     # whether or not validation was successful. Here you can delete
@@ -98,13 +118,7 @@ clean_challenge() {
 deploy_cert() {
     local DOMAIN="${1}" KEYFILE="${2}" CERTFILE="${3}" FULLCHAINFILE="${4}" CHAINFILE="${5}" TIMESTAMP="${6}"
 
-    if [[ -z "${ROOT_DIR}" ]];then
-        rootDirectory="${PWD}/hooks/cfhookbash";
-    else
-        rootDirectory="${ROOT_DIR}";
-    fi
-
-    FILE="${rootDirectory}/deploy.sh"
+    FILE="${hookDirectory}/deploy.sh"
     if test -f "$FILE"; then
 
         . "$FILE"
